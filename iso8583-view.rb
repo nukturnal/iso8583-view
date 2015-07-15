@@ -2,7 +2,12 @@ require 'da_funk'
 
 class IsoMessage < ISO8583::Message
   include ISO8583
+
+  attr_accessor :custom_bitmap
+
   mti_format N, :length => 4
+
+  # ISO Messages
   mti 100 , "Pre Authorization request"
   mti 110 , "Request Response"
   mti 200 , "Acquirer Financial Request"
@@ -19,6 +24,8 @@ class IsoMessage < ISO8583::Message
   mti 430 , "Issuer Reversal Response"
   mti 800 , "Network Management Request"
   mti 810 , "Network Management Response"
+
+  # Fields
   bmp  2  , "Primary account number (PAN)"  , LLVAR_N
   bmp  3  , "Processing Code" , N , :length =>  6
   bmp  4  , "Amount Transaction"  , N , :length => 12
@@ -146,23 +153,40 @@ class IsoMessage < ISO8583::Message
   bmp  127, "Reserved for national use" , LLLVAR_ANS
   bmp  128, "Reserved for national use" , LLLVAR_ANS
 
-  def iso_get_message(size_header, size_trailler, message)
-    if (size_header.nil? || size_header.eql?(0)) && (size_trailler.nil? || size_trailler.eql?(0))
-      @iso = IsoMessage.parse(message, true)
+  def iso_get_message(size_header, size_trailler, bitmap=nil, message)
+    if !bitmap.nil?
+      iso_read_bitmap_file(bitmap)
     else
-      if !size_header.nil? && !size_header.eql?(0)
-        msg = message.slice(size_header, message.length - size_header)
-      end
-      if !size_trailler.nil? && !size_trailler.eql?(0)
-        if !msg.nil?
-          msg = msg.slice(0, msg.length - size_trailler)
-        else
-          msg = message.slice(0, message.length - size_trailler)
+      if (size_header.nil? || size_header.eql?(0)) && (size_trailler.nil? || size_trailler.eql?(0))
+        @iso = IsoMessage.parse(message, true)
+      else
+        if !size_header.nil? && !size_header.eql?(0)
+          msg = message.slice(size_header, message.length - size_header)
         end
+        if !size_trailler.nil? && !size_trailler.eql?(0)
+          if !msg.nil?
+            msg = msg.slice(0, msg.length - size_trailler)
+          else
+            msg = message.slice(0, message.length - size_trailler)
+          end
+        end
+        @iso = IsoMessage.parse(msg, true)
       end
-      @iso = IsoMessage.parse(msg, true)
+      puts "#{@iso}"
     end
-    puts "#{@iso}"
+  end
+
+  def bit_type(bit, default)
+    if @custom_bitmap
+      custom
+    else
+      default
+    end
+  end
+
+  def iso_read_bitmap_file(bitmap_filename)
+    file = File.open(bitmap_filename, "r")
+    @custom_bitmap = file.read
   end
 end
 
@@ -184,3 +208,5 @@ m = "0200B238060120C192080000000000000004003000000000000400071317082800003114082
 
 set = IsoMessage.new
 set.iso_get_message(nil, nil, m)
+#fl = set.iso_read_bitmap_file("bitmap.dat")
+#puts fl
